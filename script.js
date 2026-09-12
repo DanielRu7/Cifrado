@@ -179,13 +179,6 @@ document.querySelectorAll('.tab').forEach(tab => {
   });
 });
 
-function updateShiftCount(){
-  const n = getAlphabetArray().length;
-  document.getElementById('nShifts').textContent = Math.max(n - 1, 0);
-}
-document.getElementById('alphabet').addEventListener('input', updateShiftCount);
-updateShiftCount();
-
 document.getElementById('btnCifrar').addEventListener('click', () => {
   const alphabet = getAlphabetArray();
   const text = document.getElementById('plain').value;

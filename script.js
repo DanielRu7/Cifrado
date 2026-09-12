@@ -1,55 +1,14 @@
-/* =========================================================================
-   CIFRADO CÉSAR / ATBASH SOBRE ALFABETO PARAMETRIZABLE
-   -------------------------------------------------------------------------
-   1. ALFABETO
-      Arreglo ordenado de caracteres (por defecto, los 95 imprimibles de
-      ASCII 32-126). La posición de cada carácter en ese arreglo es lo que
-      César y Atbash desplazan/invierten.
+// Cifrado César y Atbash, pero sobre un alfabeto que arma el usuario
+// (no nomás las 26 letras de siempre). La idea clave: todo se mueve
+// por ÍNDICE dentro del arreglo del alfabeto, no por la letra en sí.
+// Por eso funciona igual si metes ASCII completo, solo minúsculas,
+// emojis, lo que sea.
 
-   2. CÉSAR
-      cifrado(c)    = alfabeto[ (indice(c) + k) mod n ]
-      descifrado(c) = alfabeto[ (indice(c) - k) mod n ]
-
-   3. ATBASH (involutivo: cifrar == descifrar)
-      atbash(c) = alfabeto[ n - 1 - indice(c) ]
-
-   4. LIMPIEZA DE RUIDO ANTES DE DESCIFRAR
-      A diferencia de simplemente "saltar" los caracteres que no están en
-      el alfabeto (dejarlos parados en medio del texto), aquí se ELIMINAN
-      por completo antes de correr el análisis. Esto es a propósito:
-      si alguien mete caracteres decorativos que no pertenecen al alfabeto
-      de trabajo (otros alfabetos, emoji, símbolos), no deben aparecer en
-      el resultado ni contaminar el análisis de frecuencias. También se
-      eliminan caracteres invisibles típicos (marcas de dirección de
-      texto RTL/LTR, espacio de ancho cero, BOM) que ni siquiera se ven
-      al copiar/pegar pero sí cuentan como "caracteres" para JavaScript.
-
-   5. CRIPTOANÁLISIS AUTOMÁTICO (aporte de Al-Kindi)
-      Al descifrar, el sistema no pregunta el método. Genera todos los
-      candidatos posibles (1 candidato Atbash + (n-1) candidatos César)
-      y los califica con una prueba de bondad de ajuste chi-cuadrada
-      contra las frecuencias de letras del español. El candidato con
-      menor chi-cuadrado es el único que se muestra: el usuario nunca
-      elige, el sistema decide.
-
-      NOTA IMPORTANTE SOBRE LA FIABILIDAD ESTADÍSTICA:
-      Un chi-cuadrado "en bruto" (sin normalizar) es engañoso cuando los
-      candidatos tienen tamaños de muestra muy distintos: un candidato de
-      puro ruido que por azar solo tiene 2 o 3 caracteres que caen dentro
-      del rango a-z/ñ puede "ajustar" casualmente mejor que el candidato
-      correcto con 100+ letras reales, simplemente porque una muestra
-      chiquita tiene mucha más varianza. Para evitarlo:
-        a) Se descalifica (score = Infinity) cualquier candidato cuyo
-           conteo de letras española sea menor a MIN_LETRAS_MUESTRA.
-        b) El chi-cuadrado se normaliza dividiendo entre el total de
-           letras contadas (chi-cuadrado reducido), para no premiar
-           coincidencias de muestra chica sobre muestras grandes.
-      Aun así, con textos muy cortos (por debajo del mínimo) NINGÚN
-      candidato es fiable: en ese caso el sistema avisa en vez de
-      inventar una respuesta.
-   ========================================================================= */
-
-// --- Frecuencias relativas de letras en español (%)
+// Tabla de frecuencia de letras en español (sacada de estadísticas
+// típicas del idioma). Esto es la base del criptoanálisis: en
+// cualquier texto largo en español, la 'e' y la 'a' van a aparecer
+// muchísimo más que la 'k' o la 'w'. Si un texto NO se parece a esto,
+// probablemente no está bien descifrado (o no es español).
 const SPANISH_FREQ = {
   a:12.53, b:1.42, c:4.68, d:5.86, e:13.68, f:0.69, g:1.01, h:0.70,
   i:6.25, j:0.44, k:0.01, l:4.97, m:3.15, n:6.71, ñ:0.31, o:8.68,
@@ -57,16 +16,21 @@ const SPANISH_FREQ = {
   x:0.22, y:0.90, z:0.52
 };
 
-// Muestra mínima de letras españolas contadas para considerar un
-// candidato estadísticamente confiable. Por debajo de esto, el
-// chi-cuadrado es ruido y no se usa para decidir nada.
+// Con textos muy cortos el chi-cuadrado se vuelve una mentira: puede
+// que 3 letras le "atinen" de pura suerte a las frecuencias esperadas
+// y parezca mejor candidato que el correcto. Por eso ponemos un piso:
+// si no hay al menos estas letras contadas, ni se toma en serio ese
+// candidato.
 const MIN_LETRAS_MUESTRA = 15;
 
-// Caracteres invisibles conocidos que se usan para "esconder" ruido sin
-// que se vea al copiar/pegar: espacio de ancho cero, marcas de dirección
-// de texto (usadas por árabe/hebreo), BOM, joiners.
+// Caracteres invisibles que la gente a veces mete para "esconder" cosas
+// al copiar y pegar (espacio de ancho cero, marcas raras de dirección
+// de texto, BOM). No se ven pero para JS SÍ cuentan como caracteres,
+// así que hay que quitarlos antes de analizar nada.
 const INVISIBLES_REGEX = /[\u200B-\u200F\u202A-\u202E\u2060\uFEFF]/g;
 
+// Alfabeto por default: los 95 caracteres imprimibles de ASCII
+// (del espacio al 126). Con esto arranca la página si no se toca nada.
 function buildAsciiPrintable(){
   let arr = [];
   for (let code = 32; code <= 126; code++){
@@ -75,6 +39,11 @@ function buildAsciiPrintable(){
   return arr.join('');
 }
 
+// Lee lo que el usuario haya puesto en el textarea de alfabeto y le
+// quita los caracteres repetidos (si metió la misma letra dos veces
+// se queda solo con la primera aparición). El ORDEN en que quedan
+// importa un montón, porque ese orden es el que usan César y Atbash
+// para calcular índices.
 function getAlphabetArray(){
   const raw = document.getElementById('alphabet').value;
   const seen = new Set();
@@ -85,9 +54,12 @@ function getAlphabetArray(){
   return out;
 }
 
-// Quita invisibles y, después, cualquier carácter que no esté en el
-// alfabeto activo. No los "salta": los borra, para que el ruido
-// desaparezca del texto en vez de quedarse incrustado en el resultado.
+// Antes de intentar descifrar algo, hay que limpiar la basura:
+// 1) los invisibles de arriba
+// 2) cualquier símbolo que ni siquiera esté en el alfabeto activo
+// Y ojo, no los dejamos "de adorno" en medio del texto, los BORRAMOS,
+// porque si no se cuelan en el conteo de frecuencias y arruinan todo
+// el análisis (o de plano salen raros en el resultado final).
 function limpiarRuido(texto, alphabet){
   const sinInvisibles = texto.replace(INVISIBLES_REGEX, '');
   const permitidos = new Set(alphabet);
@@ -100,8 +72,15 @@ function limpiarRuido(texto, alphabet){
   return limpio;
 }
 
+// mod normal de JS a veces regresa negativos (ej. -1 % 5 = -1), y eso
+// nos rompería el índice del arreglo. Esto lo arregla para que siempre
+// caiga en el rango 0..m-1.
 function mod(n, m){ return ((n % m) + m) % m; }
 
+// El César de toda la vida, pero en vez de sumarle al código de la
+// letra le sumamos a su POSICIÓN dentro del alfabeto que sea. Los
+// caracteres que no estén en el alfabeto se quedan igualitos (por si
+// hay espacios o signos que el usuario no metió a propósito).
 function caesarTransform(text, alphabet, shift){
   const n = alphabet.length;
   const index = new Map(alphabet.map((c,i)=>[c,i]));
@@ -117,6 +96,10 @@ function caesarTransform(text, alphabet, shift){
   return out;
 }
 
+// Atbash: le das la vuelta al alfabeto (el primero se cambia por el
+// último, el segundo por el penúltimo...). Como aplicarlo dos veces te
+// regresa al texto original, la misma función sirve para cifrar y
+// para descifrar, no hay que hacer una versión "inversa" aparte.
 function atbashTransform(text, alphabet){
   const n = alphabet.length;
   const index = new Map(alphabet.map((c,i)=>[c,i]));
@@ -132,10 +115,12 @@ function atbashTransform(text, alphabet){
   return out;
 }
 
-// Chi-cuadrada de bondad de ajuste contra el español, ROBUSTA:
-//  - Descalifica muestras pequeñas (< MIN_LETRAS_MUESTRA) con Infinity.
-//  - Normaliza dividiendo entre el total de letras contadas, para que
-//    una muestra grande y una chica sean comparables entre sí.
+// Aquí es donde de verdad se rompe el cifrado. Contamos cuántas veces
+// sale cada letra española en el texto y lo comparamos contra lo que
+// "debería" salir según SPANISH_FREQ. Entre más se parezca, más bajo
+// el chi-cuadrado, y más probable que ESE sea el texto descifrado
+// correcto (es básicamente lo que hacía al-Kindi a mano, nomás que
+// aquí lo hace la computadora en un parpadeo).
 function chiSquaredSpanish(text){
   const counts = {};
   let total = 0;
@@ -145,6 +130,8 @@ function chiSquaredSpanish(text){
       total++;
     }
   }
+  // Si no hay suficientes letras para confiar en el resultado, ni le
+  // seguimos: lo mandamos directo a Infinity para que quede descartado.
   if (total < MIN_LETRAS_MUESTRA) return Infinity;
   let chi2 = 0;
   for (const letra in SPANISH_FREQ){
@@ -152,16 +139,25 @@ function chiSquaredSpanish(text){
     const observed = counts[letra] || 0;
     chi2 += Math.pow(observed - expected, 2) / expected;
   }
+  // Se divide entre el total de letras para que un texto cortito y uno
+  // largote sean comparables entre sí (si no, el chi-cuadrado crudo
+  // castiga más a los textos largos nomás por tener más letras).
   return chi2 / total;
 }
 
+// Aquí pasa la magia de "el usuario no elige nada". Probamos TODAS las
+// formas posibles de que haya salido ese texto cifrado (Atbash + cada
+// desplazamiento de César que se pueda con este alfabeto) y nos
+// quedamos con la que mejor se parezca al español. Ni una sola vez le
+// preguntamos al usuario "¿cuál de estas crees que es?".
 function autoDecrypt(cipherTextCrudo, alphabet){
-  // Paso 1: eliminar ruido (invisibles + cualquier cosa fuera del alfabeto)
+  // primero, fuera la basura
   const cipherText = limpiarRuido(cipherTextCrudo, alphabet);
 
   const n = alphabet.length;
   const candidates = [];
 
+  // el candidato Atbash siempre es uno solo, no tiene "desplazamientos"
   candidates.push({
     method: 'Atbash',
     detail: '',
@@ -169,6 +165,9 @@ function autoDecrypt(cipherTextCrudo, alphabet){
     score: null
   });
 
+  // y aquí probamos TODOS los desplazamientos posibles de César,
+  // como fuerza bruta pero tantito más inteligente porque luego
+  // calificamos cada intento en vez de enseñarlos todos
   for (let k = 1; k < n; k++){
     const text = caesarTransform(cipherText, alphabet, -k);
     candidates.push({
@@ -179,25 +178,30 @@ function autoDecrypt(cipherTextCrudo, alphabet){
     });
   }
 
+  // calificamos a todos y ordenamos del más creíble al menos creíble
   for (const c of candidates){ c.score = chiSquaredSpanish(c.text); }
   candidates.sort((a,b) => a.score - b.score);
 
   const best = candidates[0];
-  // Si hasta el mejor candidato quedó descalificado, ninguno es fiable:
-  // el texto es demasiado corto para el análisis de frecuencias.
+  // si hasta el mejor de todos quedó en Infinity, es que el texto
+  // estaba muy cortito para confiar en nada — mejor avisar que
+  // inventarnos una respuesta que ni sabemos si es correcta
   best.confiable = best.score !== Infinity;
 
   return best;
 }
 
-// ---------------- UI wiring ----------------
+// interface
 
+// al cargar la página, dejamos listo el ASCII de default en el textarea
 document.getElementById('alphabet').value = buildAsciiPrintable();
 
+// botón para regresar al ASCII de default si el usuario ya lo cambió
 document.getElementById('resetAlphabet').addEventListener('click', () => {
   document.getElementById('alphabet').value = buildAsciiPrintable();
 });
 
+// las pestañitas de Cifrar / Descifrar, nomás mostrar y esconder paneles
 document.querySelectorAll('.tab').forEach(tab => {
   tab.addEventListener('click', () => {
     document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
@@ -208,6 +212,7 @@ document.querySelectorAll('.tab').forEach(tab => {
   });
 });
 
+// botón de Cifrar: aquí SÍ el usuario elige el método (César o Atbash)
 document.getElementById('btnCifrar').addEventListener('click', () => {
   const alphabet = getAlphabetArray();
   if (alphabet.length === 0){
@@ -227,6 +232,8 @@ document.getElementById('btnCifrar').addEventListener('click', () => {
   document.getElementById('outCifrar').textContent = result || ' ';
 });
 
+// botón de Descifrar: aquí YA NO se pregunta nada, entra directo a
+// autoDecrypt() y se muestra nomás el resultado ganador
 document.getElementById('btnDescifrar').addEventListener('click', () => {
   const alphabet = getAlphabetArray();
   if (alphabet.length === 0){
@@ -239,6 +246,8 @@ document.getElementById('btnDescifrar').addEventListener('click', () => {
   document.getElementById('outDescifrar').textContent = best.text || ' ';
 
   if (!best.confiable){
+    // aquí es honesto el sistema: si no le alcanzó texto para estar
+    // seguro, lo dice en vez de aparentar que sí sabe
     document.getElementById('metaDescifrar').innerHTML =
       `<b>⚠ Texto demasiado corto para detección confiable</b> ` +
       `(se necesitan al menos ${MIN_LETRAS_MUESTRA} letras del alfabeto español para el análisis de frecuencias). ` +

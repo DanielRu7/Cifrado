@@ -31,6 +31,22 @@
       contra las frecuencias de letras del español. El candidato con
       menor chi-cuadrado es el único que se muestra: el usuario nunca
       elige, el sistema decide.
+
+      NOTA IMPORTANTE SOBRE LA FIABILIDAD ESTADÍSTICA:
+      Un chi-cuadrado "en bruto" (sin normalizar) es engañoso cuando los
+      candidatos tienen tamaños de muestra muy distintos: un candidato de
+      puro ruido que por azar solo tiene 2 o 3 caracteres que caen dentro
+      del rango a-z/ñ puede "ajustar" casualmente mejor que el candidato
+      correcto con 100+ letras reales, simplemente porque una muestra
+      chiquita tiene mucha más varianza. Para evitarlo:
+        a) Se descalifica (score = Infinity) cualquier candidato cuyo
+           conteo de letras española sea menor a MIN_LETRAS_MUESTRA.
+        b) El chi-cuadrado se normaliza dividiendo entre el total de
+           letras contadas (chi-cuadrado reducido), para no premiar
+           coincidencias de muestra chica sobre muestras grandes.
+      Aun así, con textos muy cortos (por debajo del mínimo) NINGÚN
+      candidato es fiable: en ese caso el sistema avisa en vez de
+      inventar una respuesta.
    ========================================================================= */
 
 // --- Frecuencias relativas de letras en español (%)
@@ -40,6 +56,11 @@ const SPANISH_FREQ = {
   p:2.51, q:0.88, r:6.87, s:7.98, t:4.63, u:3.93, v:0.90, w:0.02,
   x:0.22, y:0.90, z:0.52
 };
+
+// Muestra mínima de letras españolas contadas para considerar un
+// candidato estadísticamente confiable. Por debajo de esto, el
+// chi-cuadrado es ruido y no se usa para decidir nada.
+const MIN_LETRAS_MUESTRA = 15;
 
 // Caracteres invisibles conocidos que se usan para "esconder" ruido sin
 // que se vea al copiar/pegar: espacio de ancho cero, marcas de dirección
@@ -111,7 +132,10 @@ function atbashTransform(text, alphabet){
   return out;
 }
 
-// Chi-cuadrada de bondad de ajuste contra el español.
+// Chi-cuadrada de bondad de ajuste contra el español, ROBUSTA:
+//  - Descalifica muestras pequeñas (< MIN_LETRAS_MUESTRA) con Infinity.
+//  - Normaliza dividiendo entre el total de letras contadas, para que
+//    una muestra grande y una chica sean comparables entre sí.
 function chiSquaredSpanish(text){
   const counts = {};
   let total = 0;
@@ -121,14 +145,14 @@ function chiSquaredSpanish(text){
       total++;
     }
   }
-  if (total === 0) return Infinity;
+  if (total < MIN_LETRAS_MUESTRA) return Infinity;
   let chi2 = 0;
   for (const letra in SPANISH_FREQ){
     const expected = (SPANISH_FREQ[letra] / 100) * total;
     const observed = counts[letra] || 0;
     chi2 += Math.pow(observed - expected, 2) / expected;
   }
-  return chi2;
+  return chi2 / total;
 }
 
 function autoDecrypt(cipherTextCrudo, alphabet){
@@ -158,7 +182,12 @@ function autoDecrypt(cipherTextCrudo, alphabet){
   for (const c of candidates){ c.score = chiSquaredSpanish(c.text); }
   candidates.sort((a,b) => a.score - b.score);
 
-  return candidates[0];
+  const best = candidates[0];
+  // Si hasta el mejor candidato quedó descalificado, ninguno es fiable:
+  // el texto es demasiado corto para el análisis de frecuencias.
+  best.confiable = best.score !== Infinity;
+
+  return best;
 }
 
 // ---------------- UI wiring ----------------
@@ -181,6 +210,11 @@ document.querySelectorAll('.tab').forEach(tab => {
 
 document.getElementById('btnCifrar').addEventListener('click', () => {
   const alphabet = getAlphabetArray();
+  if (alphabet.length === 0){
+    alert('El alfabeto no puede estar vacío.');
+    return;
+  }
+
   const text = document.getElementById('plain').value;
   const metodo = document.querySelector('input[name=metodoC]:checked').value;
   let result;
@@ -195,9 +229,22 @@ document.getElementById('btnCifrar').addEventListener('click', () => {
 
 document.getElementById('btnDescifrar').addEventListener('click', () => {
   const alphabet = getAlphabetArray();
+  if (alphabet.length === 0){
+    alert('El alfabeto no puede estar vacío.');
+    return;
+  }
+
   const text = document.getElementById('cipher').value;
   const best = autoDecrypt(text, alphabet);
   document.getElementById('outDescifrar').textContent = best.text || ' ';
-  document.getElementById('metaDescifrar').innerHTML =
-    `<b>Método detectado:</b> ${best.method} ${best.detail} — <b>χ² =</b> ${best.score.toFixed(2)}`;
+
+  if (!best.confiable){
+    document.getElementById('metaDescifrar').innerHTML =
+      `<b>⚠ Texto demasiado corto para detección confiable</b> ` +
+      `(se necesitan al menos ${MIN_LETRAS_MUESTRA} letras del alfabeto español para el análisis de frecuencias). ` +
+      `El resultado mostrado es solo el candidato "menos malo", no una detección real.`;
+  } else {
+    document.getElementById('metaDescifrar').innerHTML =
+      `<b>Método detectado:</b> ${best.method} ${best.detail} — <b>χ² reducido =</b> ${best.score.toFixed(4)}`;
+  }
 });

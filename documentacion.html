@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Documentación · Al-Kindi · Cifrado César / Atbash</title>
+<link rel="stylesheet" href="./style.css">
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <p class="kicker">DOCUMENTACIÓN TÉCNICA</p>
+    <h1>Cómo funciona <em>César</em> &amp; <em>Atbash</em></h1>
+    <p style="margin-top:8px;">
+      <a href="./index.html" class="ghost" id="btn-doc">Ver programa</a>
+    </p>
+  </header>
+
+  <section class="panel">
+    <h2>1. Alfabeto parametrizable</h2>
+    <p>
+      El sistema no trabaja con un alfabeto fijo de 26 letras: trabaja con un
+      <strong>arreglo ordenado de caracteres</strong> que el usuario define
+      libremente en el campo "Alfabeto". Por default se carga el conjunto
+      completo de caracteres imprimibles de ASCII (códigos 32 al 126, 95
+      símbolos en total), pero puede reemplazarse por cualquier otro
+      conjunto: solo minúsculas, minúsculas con <code>ñ</code>, alfabetos con
+      dígitos, alfabetos con mayúsculas, etc.
+    </p>
+    <p>
+      La <strong>posición</strong> de cada carácter dentro de ese arreglo es
+      lo único que le importa al algoritmo. César y Atbash no cifran
+      "letras": cifran <em>índices</em> dentro del alfabeto que se les dio.
+    </p>
+  </section>
+
+  <section class="panel">
+    <h2>2. Cifrado César</h2>
+    <p>
+      Cada carácter del texto se busca dentro del alfabeto activo, se toma
+      su índice, se le suma (o resta, para descifrar) un desplazamiento
+      <code>k</code>, y el resultado se envuelve con módulo para no salirse
+      del arreglo:
+    </p>
+    <pre style="white-space:pre-wrap;">cifrado(c)    = alfabeto[ (indice(c) + k) mod n ]
+descifrado(c) = alfabeto[ (indice(c) - k) mod n ]</pre>
+    <p>
+      Donde <code>n</code> es el tamaño del alfabeto activo. Si el usuario
+      cambia el alfabeto, automáticamente cambia también el "universo" de
+      desplazamientos posibles (<code>n - 1</code> desplazamientos válidos).
+    </p>
+  </section>
+
+  <section class="panel">
+    <h2>3. Cifrado Atbash</h2>
+    <p>
+      Atbash invierte el orden del alfabeto: el primer carácter se
+      intercambia con el último, el segundo con el penúltimo, y así
+      sucesivamente. Es <strong>involutivo</strong>: aplicar Atbash dos
+      veces regresa el texto original, por eso la misma función sirve para
+      cifrar y para descifrar.
+    </p>
+    <pre style="white-space:pre-wrap;">atbash(c) = alfabeto[ n - 1 - indice(c) ]</pre>
+  </section>
+
+  <section class="panel">
+    <h2>4. Limpieza de ruido</h2>
+    <p>
+      Antes de intentar descifrar nada, el sistema recorre el texto cifrado
+      y <strong>elimina por completo</strong> (no salta, no deja parado)
+      cualquier carácter que no pertenezca al alfabeto activo. Esto incluye
+      símbolos decorativos, emojis, caracteres de otros idiomas, y también
+      caracteres invisibles que suelen usarse para "esconder" ruido al
+      copiar y pegar (espacios de ancho cero, marcas de dirección de texto
+      RTL/LTR, BOM). El objetivo es que ese ruido no contamine el análisis
+      de frecuencias ni aparezca mezclado en el resultado final.
+    </p>
+  </section>
+
+  <section class="panel">
+    <h2>5. Criptoanálisis automático (Al-Kindi)</h2>
+    <p>
+      Al descifrar, el sistema <strong>nunca le pregunta al usuario</strong>
+      qué método o qué desplazamiento usar. En vez de eso, genera
+      <em>todos</em> los candidatos posibles: 1 candidato Atbash más
+      <code>n - 1</code> candidatos César (uno por cada desplazamiento
+      posible dentro del alfabeto activo), y evalúa cada uno con una prueba
+      de bondad de ajuste chi-cuadrada contra las frecuencias conocidas de
+      las letras en español — la técnica de análisis de frecuencias que se
+      le atribuye a Al-Kindi, considerado el primer criptoanalista de la
+      historia.
+    </p>
+    <p>
+      El candidato con menor chi-cuadrado es el único que se muestra. El
+      factor humano no interviene en la decisión.
+    </p>
+    <p>
+      <strong>Detalle importante de fiabilidad estadística:</strong> un
+      chi-cuadrado sin ajustar es engañoso cuando los candidatos tienen
+      tamaños de muestra muy distintos, porque una muestra pequeña de
+      letras puede "coincidir" con las frecuencias esperadas por pura
+      casualidad. Para evitar falsos positivos, el sistema:
+    </p>
+    <ul style="margin-left:20px;">
+      <li>Descalifica cualquier candidato cuya cantidad de letras reconocidas sea menor a un mínimo razonable.</li>
+      <li>Normaliza el chi-cuadrado dividiendo entre el total de letras contadas (chi-cuadrado reducido), para que muestras grandes y chicas sean comparables entre sí.</li>
+      <li>Si ni siquiera el mejor candidato alcanza el mínimo de muestra, el sistema avisa explícitamente que el texto es demasiado corto para una detección confiable, en vez de inventar una respuesta.</li>
+    </ul>
+  </section>
+
+  <footer>
+    <p>Proyecto académico — Ingeniería en Sistemas Computacionales, UAA.</p>
+  </footer>
+
+</div>
+</body>
+</html>

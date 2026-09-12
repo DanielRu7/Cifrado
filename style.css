@@ -113,10 +113,29 @@ button.ghost{
   color:var(--gold);
   white-space:pre-wrap;
   word-break:break-word;
-  min-height:24px;
+  min-height:150px;
 }
 .meta{font-family:var(--mono);font-size:12px;color:#8f8163;margin-top:8px;}
 .meta b{color:var(--gold-dim);}
 
 footer{border-top:1px solid var(--line);padding-top:18px;margin-top:12px;font-size:12px;color:#8f8163;}
 footer p{margin:4px 0;}
+
+#btn-doc {
+  text-decoration: none;
+  display: inline-block;
+  background: var(--panel);
+  color: var(--gold);
+  border: 1px solid var(--gold-dim);
+  padding: 12px 24px;
+  font-size: 13px;
+  letter-spacing: 0.03em;
+  border-radius: 5px;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+#btn-doc:hover {
+  background: #1f1b17;
+  border-color: var(--gold);
+  color: var(--parchment);
+}

@@ -1,18 +1,79 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="es">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Cifrado chido!</title>
-    <link rel="stylesheet" href="style.css">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Al-Kindi · Cifrado César / Atbash</title>
+<link rel="stylesheet" href="style.css">
 </head>
 <body>
-    <form action="">
-        <textarea name="" id="" ></textarea>
+<div class="wrap">
 
-        <button type="submit">En</button>
-    </form>
+  <header>
+    <p class="kicker">CRIPTOGRAFÍA CLÁSICA</p>
+    <h1>Cifrado <em>César</em> &amp; <em>Atbash</em></h1>
+  </header>
 
-    <script src="script.js"></script>
+  <div class="tabs">
+    <button class="tab active" data-tab="cifrar">Cifrar</button>
+    <button class="tab" data-tab="descifrar">Descifrar</button>
+  </div>
+
+  <!-- Alfabeto: compartido por ambos modos -->
+  <div class="panel">
+    <label for="alphabet">Alfabeto</label>
+    <textarea id="alphabet" rows="2"></textarea>
+    <button class="ghost" id="resetAlphabet" type="button">Restaurar ASCII</button>
+  </div>
+
+  <!-- MODO CIFRAR -->
+  <section id="panel-cifrar" class="panel">
+    <fieldset>
+      <legend>Módulo</legend>
+      <div class="method-row">
+        <label class="opt"><input type="radio" name="metodoC" value="cesar" checked> César</label>
+        <label class="opt"><input type="radio" name="metodoC" value="atbash"> Atbash</label>
+        <div class="field small" id="shiftFieldC">
+          <label for="shiftC">Desplazamiento</label>
+          <input type="number" id="shiftC" value="3">
+        </div>
+      </div>
+    </fieldset>
+
+    <label for="plain">Texto</label>
+    <textarea id="plain" rows="3" placeholder="Escribe tu mensaje..."></textarea>
+
+    <div style="margin-top:16px;">
+      <button class="action" id="btnCifrar">Cifrar →</button>
+    </div>
+
+    <div class="output">
+      <label>Resultado</label>
+      <div class="result" id="outCifrar">&nbsp;</div>
+    </div>
+  </section>
+
+
+  <section id="panel-descifrar" class="panel" style="display:none;">
+    <label for="cipher">Texto cifrado</label>
+    <textarea id="cipher" rows="4" placeholder="Pega el texto cifrado..."></textarea>
+
+    <div style="margin-top:10px;">
+      <button class="action" id="btnDescifrar">Descifrar →</button>
+    </div>
+
+    <div class="output">
+      <label>Resultado</label>
+      <div class="result" id="outDescifrar">&nbsp;</div>
+      <p class="meta" id="metaDescifrar"></p>
+    </div>
+  </section>
+
+  <footer>
+    <p>Proyecto académico — Ingeniería en Sistemas Computacionales, UAA.</p>
+  </footer>
+
+</div>
+<script src="script.js"></script>
 </body>
 </html>

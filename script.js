@@ -54,22 +54,23 @@ function getAlphabetArray(){
   return out;
 }
 
-// Antes de intentar descifrar algo, hay que limpiar la basura:
-// 1) los invisibles de arriba
-// 2) cualquier símbolo que ni siquiera esté en el alfabeto activo
-// Y ojo, no los dejamos "de adorno" en medio del texto, los BORRAMOS,
-// porque si no se cuelan en el conteo de frecuencias y arruinan todo
-// el análisis (o de plano salen raros en el resultado final).
-function limpiarRuido(texto, alphabet){
-  const sinInvisibles = texto.replace(INVISIBLES_REGEX, '');
-  const permitidos = new Set(alphabet);
-  let limpio = '';
-  for (const ch of sinInvisibles){
-    if (permitidos.has(ch)){
-      limpio += ch;
-    }
-  }
-  return limpio;
+// Antes de intentar descifrar algo, solo hay que quitar los invisibles
+// de arriba (zero-width, BOM, marcas de dirección RTL/LTR): esos sí son
+// ruido real que nadie mete a propósito y que arruinaría el conteo de
+// frecuencias si se cuela.
+//
+// OJO: aquí ya NO se borran los caracteres que no estén en el alfabeto
+// (espacios, puntuación, etc.). Antes se hacía, pero eso era un bug:
+// al cifrar, esos caracteres se dejan intactos en el texto cifrado
+// (caesarTransform/atbashTransform los copian tal cual), así que si al
+// descifrar los borrábamos de golpe, el resultado perdía justo esos
+// caracteres —típicamente los espacios— en vez de conservarlos. Ahora
+// se dejan pasar tal cual hacia caesarTransform/atbashTransform, que ya
+// saben copiarlos sin tocarlos, exactamente como pasa al cifrar. Para
+// el análisis de frecuencias no hace falta quitarlos antes: chiSquaredSpanish
+// ya solo cuenta los caracteres que están en SPANISH_FREQ.
+function limpiarRuido(texto){
+  return texto.replace(INVISIBLES_REGEX, '');
 }
 
 // mod normal de JS a veces regresa negativos (ej. -1 % 5 = -1), y eso
@@ -151,8 +152,8 @@ function chiSquaredSpanish(text){
 // quedamos con la que mejor se parezca al español. Ni una sola vez le
 // preguntamos al usuario "¿cuál de estas crees que es?".
 function autoDecrypt(cipherTextCrudo, alphabet){
-  // primero, fuera la basura
-  const cipherText = limpiarRuido(cipherTextCrudo, alphabet);
+  // primero, fuera los invisibles (espacios y demás se quedan intactos)
+  const cipherText = limpiarRuido(cipherTextCrudo);
 
   const n = alphabet.length;
   const candidates = [];
